@@ -10,7 +10,7 @@
 
   var CONFIG = {
     // Google Apps Script web-app URL (ends with /exec)
-    apiUrl: '',
+    apiUrl: 'https://script.google.com/macros/s/AKfycbwdh2Mlf9OgZdJW_Jvpe1ZkJsGJ_LnvJobYUT7hu5KmWpIcV0LPnxtc-RwH0ah3I6P-0g/exec',
     ownerPhone: '972522967041',
     ownerPhoneDisplay: '052-296-7041',
     // Used for links when the page is opened from a local file instead of the website
@@ -210,7 +210,8 @@
     return e;
   }
 
-  function api(payload) {
+  // Every action is safe to repeat (sign refuses a second signature), so a hiccup gets one retry
+  function api(payload, retried) {
     if (!CONFIG.apiUrl) return Promise.reject(apiError('no-server'));
     var ctrl = window.AbortController ? new AbortController() : null;
     var timer = ctrl && setTimeout(function () { ctrl.abort(); }, 30000);
@@ -221,7 +222,13 @@
         clearTimeout(timer);
         if (!j || !j.ok) throw apiError((j && j.error) || 'error', j && j.data);
         return j;
-      }, function (e) { clearTimeout(timer); throw e; });
+      }, function (e) {
+        clearTimeout(timer);
+        if (e.code === 'network' && !retried) {
+          return new Promise(function (r) { setTimeout(r, 800); }).then(function () { return api(payload, true); });
+        }
+        throw e;
+      });
   }
 
   // Fire-and-forget save that survives the page going to the background (WhatsApp opening)
