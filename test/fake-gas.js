@@ -56,15 +56,29 @@ function makeSheet(name) {
   return sheet;
 }
 
-function loadBackend(ownerKey) {
+function makeSpreadsheet(id) {
   const sheets = [makeSheet('Sheet1')];
-  const ss = {
+  return {
+    getId: () => id,
     getSheets: () => sheets,
     getSheetByName: (n) => sheets.find((s) => s.name === n) || null,
     insertSheet(n) { const s = makeSheet(n); sheets.push(s); return s; },
   };
+}
+
+// standalone: true mimics a project made at script.google.com (no container sheet)
+function loadBackend(ownerKey, { standalone = false } = {}) {
+  const files = {};
+  const props = {};
+  let created = 0;
+  const bound = standalone ? null : makeSpreadsheet('bound');
   const context = {
-    SpreadsheetApp: { getActiveSpreadsheet: () => ss },
+    SpreadsheetApp: {
+      getActiveSpreadsheet: () => bound,
+      openById: (id) => files[id],
+      create() { created++; const ss = makeSpreadsheet('file' + created); files[ss.getId()] = ss; return ss; },
+    },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props[k] || null, setProperty(k, v) { props[k] = v; } }) },
     ContentService: {
       MimeType: { JSON: 'application/json' },
       createTextOutput: (content) => ({ content, setMimeType() { return this; } }),
@@ -78,7 +92,8 @@ function loadBackend(ownerKey) {
   vm.runInContext(src, context);
 
   return {
-    ss,
+    get ss() { return bound || files[props.SHEET_ID]; },
+    get created() { return created; },
     // Same entry point Google calls for a POST
     post(body) {
       const out = context.doPost({ postData: { contents: typeof body === 'string' ? body : JSON.stringify(body) } });

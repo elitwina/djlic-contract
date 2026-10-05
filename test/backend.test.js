@@ -75,6 +75,14 @@ test('list returns newest first with status info', () => {
   assert.equal(items.find((i) => i.k === 'Second123456').ct, 0);
 });
 
+test('standalone project creates its own spreadsheet once and reuses it', () => {
+  const b = loadBackend(KEY, { standalone: true });
+  b.post({ a: 'save', key: KEY, data: draft });
+  b.post({ a: 'save', key: KEY, data: { ...draft, k: 'Second123456' } });
+  assert.equal(b.created, 1);
+  assert.equal(b.post({ a: 'list', key: KEY }).items.length, 2);
+});
+
 test('bad JSON and unknown actions return errors instead of throwing', () => {
   const b = loadBackend(KEY);
   assert.equal(b.post('{oops').ok, false);

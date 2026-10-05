@@ -56,8 +56,20 @@ function requireOwner_(req) {
   if (!req.key || req.key !== OWNER_KEY) throw new Error('unauthorized');
 }
 
-function sheet_() {
+// Bound to a sheet → that sheet; standalone project (script.google.com) → a sheet it creates once in Drive
+function spreadsheet_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (ss) return ss;
+  var props = PropertiesService.getScriptProperties();
+  var id = props.getProperty('SHEET_ID');
+  if (id) return SpreadsheetApp.openById(id);
+  ss = SpreadsheetApp.create('הסכמי DJ LIC');
+  props.setProperty('SHEET_ID', ss.getId());
+  return ss;
+}
+
+function sheet_() {
+  var ss = spreadsheet_();
   var sh = ss.getSheetByName(SHEET_NAME);
   if (!sh) {
     var sheets = ss.getSheets();
