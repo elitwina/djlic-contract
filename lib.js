@@ -1,17 +1,12 @@
 /*
- * Pure helpers shared by the app and the tests: link encoding, validation,
+ * Pure helpers shared by the app and the tests: ids, validation,
  * signature compression/rendering and formatting. No DOM access here.
  */
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) {
-    module.exports = factory(require('./vendor/fflate.min.js'));
-  } else {
-    root.DJ = factory(root.fflate);
-  }
-})(typeof self !== 'undefined' ? self : this, function (fflate) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.DJ = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
-
-  var PAYLOAD_VERSION = '1';
 
   // ---------- base64url ----------
   var B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
@@ -49,20 +44,6 @@
     return out;
   }
 
-  // ---------- contract payload <-> URL-safe string ----------
-  function encodePayload(obj) {
-    var bytes = fflate.strToU8(JSON.stringify(obj));
-    return PAYLOAD_VERSION + b64urlEncode(fflate.deflateSync(bytes, { level: 9 }));
-  }
-
-  function decodePayload(str) {
-    if (!str || str[0] !== PAYLOAD_VERSION) throw new Error('Unknown payload version');
-    var json = fflate.strFromU8(fflate.inflateSync(b64urlDecode(str.slice(1))));
-    var obj = JSON.parse(json);
-    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) throw new Error('Bad payload');
-    return obj;
-  }
-
   // ---------- validation ----------
   function normalizePhone(input) {
     var d = String(input || '').replace(/\D/g, '');
@@ -71,6 +52,16 @@
     else if (d[0] === '0') d = '972' + d.slice(1);
     else if (d.length === 9 && d[0] === '5') d = '972' + d;
     return d.length >= 10 && d.length <= 15 ? d : null;
+  }
+
+  // Israeli numbers as 05X-XXXXXXX / 0X-XXXXXXX, anything else as +digits
+  function formatLocalPhone(input) {
+    var n = normalizePhone(input);
+    if (!n) return String(input || '').trim();
+    if (n.indexOf('972') !== 0) return '+' + n;
+    var local = '0' + n.slice(3);
+    var cut = local[1] === '5' || local[1] === '7' ? 3 : 2;
+    return local.slice(0, cut) + '-' + local.slice(cut);
   }
 
   function isValidIsraeliId(input) {
@@ -181,17 +172,6 @@
     return 'DL-' + hex4(fnv1a(s, 2166136261)) + '-' + hex4(fnv1a(s, 3339675911));
   }
 
-  var OWNER_KEYS = ['n', 't', 'd', 'p', 'pr', 'cn', 'id', 'ph', 'ds'];
-
-  // Fields the owner filled before sending that differ in the signed copy
-  function ownerMismatches(sent, signed) {
-    return OWNER_KEYS.filter(function (key) {
-      var a = sent[key] == null ? '' : String(sent[key]);
-      var b = signed[key] == null ? '' : String(signed[key]);
-      return a !== '' && a !== b;
-    });
-  }
-
   // ---------- formatting ----------
   var WEEKDAYS = ['יום ראשון', 'יום שני', 'יום שלישי', 'יום רביעי', 'יום חמישי', 'יום שישי', 'שבת'];
 
@@ -217,11 +197,16 @@
 
   function pad2(n) { return ('0' + n).slice(-2); }
 
+  function formatDay(ms) {
+    if (!ms) return '';
+    var t = new Date(ms);
+    return pad2(t.getDate()) + '.' + pad2(t.getMonth() + 1) + '.' + t.getFullYear();
+  }
+
   function formatDateTime(ms) {
     if (!ms) return '';
     var t = new Date(ms);
-    return pad2(t.getDate()) + '.' + pad2(t.getMonth() + 1) + '.' + t.getFullYear() +
-      ', ' + pad2(t.getHours()) + ':' + pad2(t.getMinutes());
+    return formatDay(ms) + ' בשעה ' + pad2(t.getHours()) + ':' + pad2(t.getMinutes());
   }
 
   function waLink(phone, text) {
@@ -231,19 +216,18 @@
   return {
     b64urlEncode: b64urlEncode,
     b64urlDecode: b64urlDecode,
-    encodePayload: encodePayload,
-    decodePayload: decodePayload,
     normalizePhone: normalizePhone,
+    formatLocalPhone: formatLocalPhone,
     isValidIsraeliId: isValidIsraeliId,
     simplifyStroke: simplifyStroke,
     encodeSig: encodeSig,
     decodeSig: decodeSig,
     sigToSvg: sigToSvg,
     docId: docId,
-    ownerMismatches: ownerMismatches,
     formatDate: formatDate,
     weekday: weekday,
     formatPrice: formatPrice,
+    formatDay: formatDay,
     formatDateTime: formatDateTime,
     waLink: waLink,
   };
